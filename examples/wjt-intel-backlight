@@ -1,0 +1,47 @@
+#!/bin/bash
+
+SELECTOR="$(which wjt)" # a sliding bar that resembles dmenu, 0-100
+# use dmenu if you can't use wjt
+SELECTOR=${SELECTOR:- $(which dmenu)}
+OUT="$(echo "up\ndown\nmin\nmax\noff" | "$SELECTOR" -p 'intel-backlight command:')"
+[ -z "$OUT" ] && OUT=0 # hack for wjt no output if not touched
+
+if [[ "$EUID" != 0 ]]
+then
+    echo "$0 must be run as root" >&2
+    exit 1
+fi
+
+[ -z "$1" ] && echo "No argument." && exit 1
+
+[[ ! -d /sys/class/backlight/intel_backlight ]] && exit
+
+current=$(< /sys/class/backlight/intel_backlight/brightness)
+max=$(< /sys/class/backlight/intel_backlight/max_brightness)
+min=$((max / 50))
+step=$((max / 10))
+
+if expr "$OUT" + 0 >/dev/null 2>&1; then #hack! Is a number?
+    current=$(( ( ($OUT * max) / 100 ) < min ? min : ( ($OUT * max) / 100 ) ))
+    #echo $max $current $min
+else
+    case $1 in
+        up)    ((current+=step))  ;;
+        down)  ((current-=step))  ;;
+        min)   current=$min       ;;
+        max)   current=$max       ;;
+        off)   current=0          ;;
+        ?)     exit               ;;
+    esac
+fi
+
+
+if (( current < min )) && [[ $1 != off ]]
+then
+    current=$min
+elif (( current > max ))
+then
+    current=$max
+fi
+
+echo $current >/sys/class/backlight/intel_backlight/brightness
